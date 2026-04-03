@@ -1,0 +1,16 @@
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.env
+db/*.db
+data/raw/
+data/models/*.joblib
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
