@@ -105,10 +105,17 @@ async def get_current_user(
 
 
 async def require_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
     """Requires authentication - raises 401 if not authenticated."""
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     user_id = decode_access_token(credentials.credentials)
     if user_id is None:
         raise HTTPException(
