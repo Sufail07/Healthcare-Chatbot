@@ -562,6 +562,143 @@ body {
     to { opacity: 0; }
 }
 
+/* === Follow-up Questions === */
+.follow-up-questions {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.follow-up-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.follow-up-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    text-align: left;
+    color: var(--text-primary);
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.follow-up-btn:hover {
+    border-color: var(--accent);
+    background: #f0f7ff;
+}
+
+/* === Suggestions Card === */
+.suggestions-card {
+    margin-top: 16px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+}
+
+.suggestions-card.home_remedies {
+    background: #f0fdf4;
+    border-color: #86efac;
+}
+
+.suggestions-card.precautions {
+    background: #fffbeb;
+    border-color: #fcd34d;
+}
+
+.suggestions-card.doctor_consultation {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+.suggestions-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.suggestions-icon {
+    font-size: 20px;
+}
+
+.suggestions-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.suggestions-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.suggestions-list li {
+    padding: 4px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding-left: 20px;
+    position: relative;
+}
+
+.suggestions-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    color: var(--severity-mild);
+}
+
+.suggestions-card.precautions .suggestions-list li::before {
+    color: var(--severity-moderate);
+}
+
+.suggestions-card.doctor_consultation .suggestions-list li::before {
+    color: var(--severity-severe);
+}
+
+.suggestions-note {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* === Emergency Warning === */
+.emergency-warning {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border: 2px solid #ef4444;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    animation: pulse-emergency 1.5s infinite;
+}
+
+.emergency-icon {
+    font-size: 28px;
+    flex-shrink: 0;
+}
+
+.emergency-warning p {
+    font-size: 14px;
+    color: #991b1b;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
 /* === Responsive === */
 @media (max-width: 768px) {
     .sidebar {

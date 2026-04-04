@@ -15,9 +15,19 @@ def train_model(raw_dir: str = "data/raw", processed_dir: str = "data/processed"
     """Train and save the disease prediction model."""
     model_path = Path(model_dir)
     model_path.mkdir(parents=True, exist_ok=True)
+    
+    processed_path = Path(processed_dir)
+    raw_path = Path(raw_dir)
 
-    # Preprocess data
-    df, symptom_list = load_and_preprocess(raw_dir, processed_dir)
+    # Check if we can use already processed data
+    if (processed_path / "training_data.csv").exists() and not (raw_path / "dataset.csv").exists():
+        print("Using existing processed data...")
+        df = pd.read_csv(processed_path / "training_data.csv")
+        with open(processed_path / "symptom_list.json") as f:
+            symptom_list = json.load(f)
+    else:
+        # Preprocess data
+        df, symptom_list = load_and_preprocess(raw_dir, processed_dir)
 
     # Prepare features and labels
     feature_columns = [c for c in df.columns if c != "disease"]

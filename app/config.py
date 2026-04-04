@@ -1,3 +1,4 @@
+import secrets
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from dotenv import dotenv_values
@@ -11,6 +12,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./db/chatbot.db"
     ml_model_path: str = "data/models/disease_model.joblib"
     feature_columns_path: str = "data/models/feature_columns.json"
+    
+    # JWT Authentication
+    jwt_secret_key: str = secrets.token_urlsafe(32)
+    jwt_algorithm: str = "HS256"
+    jwt_expiration_hours: int = 24
 
     @property
     def all_models(self) -> list[str]:

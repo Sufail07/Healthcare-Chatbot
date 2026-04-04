@@ -61,6 +61,82 @@ def _strip_think_blocks(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
+async def generate_smart_followup(
+    symptoms: list[str],
+    conversation_history: list[dict] | None,
+) -> dict:
+    """Generate smart follow-up questions to gather more information."""
+    symptom_str = ", ".join(s.replace("_", " ") for s in symptoms)
+    
+    system_prompt = (
+        "You are a friendly healthcare assistant having a conversation to understand "
+        "a patient's symptoms better. Ask follow-up questions naturally to gather more "
+        "information before making any conclusions.\n\n"
+        "Be warm, empathetic, and conversational. Ask ONE main question with optional "
+        "clarifying sub-questions."
+    )
+    
+    user_prompt = (
+        f"The user has mentioned these symptoms: {symptom_str}\n\n"
+        "Ask a friendly follow-up question to learn more. Consider asking about:\n"
+        "- Duration (how long they've had symptoms)\n"
+        "- Severity (mild, moderate, severe)\n"
+        "- Other symptoms they might have\n"
+        "- Any triggers or patterns they've noticed\n\n"
+        "Keep your response brief and conversational. Also provide 2 suggested follow-up "
+        "questions at the END in this format:\n"
+        "QUESTIONS: question1 | question2"
+    )
+    
+    try:
+        settings = get_settings()
+        client = _get_client()
+        response = await _call_with_retry(
+            client,
+            model=settings.deepseek_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=300,
+        )
+        content = response.choices[0].message.content
+        content = _strip_think_blocks(content)
+        
+        # Parse questions
+        questions = []
+        lines = content.strip().split("\n")
+        message_lines = []
+        for line in lines:
+            if line.upper().startswith("QUESTIONS:"):
+                questions = [q.strip() for q in line.split(":", 1)[1].split("|") if q.strip()]
+            else:
+                message_lines.append(line)
+        
+        return {
+            "message": "\n".join(message_lines).strip(),
+            "questions": questions[:3] if questions else [
+                "How long have you been experiencing these symptoms?",
+                "Are there any other symptoms you've noticed?",
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Smart followup error: {e}")
+        return {
+            "message": (
+                f"I see you're experiencing {symptom_str}. To better understand your situation:\n\n"
+                "- How long have you been experiencing these symptoms?\n"
+                "- Are there any other symptoms you've noticed?\n"
+                "- Have the symptoms been getting better, worse, or staying the same?"
+            ),
+            "questions": [
+                "How long have you had these symptoms?",
+                "Any other symptoms?",
+            ],
+        }
+
+
 async def generate_diagnosis_response(
     disease: str,
     confidence: float,
@@ -68,6 +144,7 @@ async def generate_diagnosis_response(
     severity: dict,
     symptoms: list[str],
     user_message: str,
+    similar_past: list[dict] | None = None,
 ) -> dict:
     """Generate a rich diagnosis response using the LLM.
 
@@ -91,6 +168,12 @@ async def generate_diagnosis_response(
     top_3_str = ", ".join(
         f"{d['disease']} ({d['confidence']:.0%})" for d in top_3
     )
+    
+    past_context = ""
+    if similar_past:
+        past_diseases = [p["disease"] for p in similar_past if p.get("disease")]
+        if past_diseases:
+            past_context = f"\nNote: The user has previously experienced similar symptoms related to: {', '.join(set(past_diseases))}. Consider this history in your response.\n"
 
     user_prompt = (
         f"The user said: \"{user_message}\"\n\n"
@@ -98,7 +181,8 @@ async def generate_diagnosis_response(
         f"Most likely condition: {disease} (confidence: {confidence:.0%})\n"
         f"Other possibilities: {top_3_str}\n"
         f"Severity: {severity['level']} (score: {severity['score']})\n"
-        f"Severity recommendation: {severity['recommendation']}\n\n"
+        f"Severity recommendation: {severity['recommendation']}\n"
+        f"{past_context}\n"
         "Please provide a helpful response. Also return structured data in this exact format "
         "at the END of your response on separate lines:\n"
         "REMEDIES: remedy1 | remedy2 | remedy3\n"

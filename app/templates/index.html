@@ -5,19 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Healthcare Chatbot</title>
     <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/bmi.css">
 </head>
 <body>
     <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h2>HealthBot</h2>
+            <div class="user-info" id="userInfo"></div>
             <button class="new-chat-btn" id="newChatBtn">+ New Chat</button>
         </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item active">💬 Chat</a>
+            <a href="/bmi" class="nav-item">⚖️ BMI Calculator</a>
+        </nav>
         <div class="conversation-list" id="conversationList">
             <!-- Populated by JS -->
         </div>
         <div class="sidebar-footer">
-            <span class="version">v1.0</span>
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+            <span class="version">v2.0</span>
         </div>
     </aside>
 

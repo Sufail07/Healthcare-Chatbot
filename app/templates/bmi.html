@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BMI Calculator - HealthBot</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <link rel="stylesheet" href="/static/css/bmi.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>HealthBot</h2>
+            <div class="user-info" id="userInfo"></div>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item">💬 Chat</a>
+            <a href="/bmi" class="nav-item active">⚖️ BMI Calculator</a>
+        </nav>
+        <div class="sidebar-footer">
+            <button class="logout-btn" id="logoutBtn">Logout</button>
+            <span class="version">v2.0</span>
+        </div>
+    </aside>
+
+    <!-- Mobile sidebar toggle -->
+    <button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+    <!-- Main Content -->
+    <main class="bmi-main">
+        <div class="bmi-container">
+            <div class="bmi-header">
+                <h1>⚖️ BMI Calculator</h1>
+                <p>Calculate your Body Mass Index and get personalized health tips</p>
+            </div>
+
+            <!-- Calculator Section -->
+            <div class="bmi-calculator">
+                <form id="bmiForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="height">Height (cm)</label>
+                            <input type="number" id="height" name="height" required min="50" max="300" placeholder="e.g., 170">
+                        </div>
+                        <div class="form-group">
+                            <label for="weight">Weight (kg)</label>
+                            <input type="number" id="weight" name="weight" required min="10" max="500" step="0.1" placeholder="e.g., 70">
+                        </div>
+                    </div>
+                    <button type="submit" class="calculate-btn" id="calculateBtn">
+                        Calculate BMI
+                    </button>
+                </form>
+            </div>
+
+            <!-- Result Section -->
+            <div class="bmi-result" id="bmiResult" style="display: none;">
+                <div class="result-header">
+                    <div class="bmi-value" id="bmiValue">--</div>
+                    <div class="bmi-category" id="bmiCategory">--</div>
+                </div>
+                <div class="result-message" id="resultMessage"></div>
+                <div class="bmi-scale">
+                    <div class="scale-bar">
+                        <div class="scale-segment underweight">Underweight</div>
+                        <div class="scale-segment normal">Normal</div>
+                        <div class="scale-segment overweight">Overweight</div>
+                        <div class="scale-segment obese">Obese</div>
+                    </div>
+                    <div class="scale-marker" id="scaleMarker"></div>
+                </div>
+                <div class="suggestions-section" id="suggestionsSection">
+                    <h3>💡 Suggestions</h3>
+                    <ul id="suggestionsList"></ul>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div class="bmi-history">
+                <h2>📊 Your BMI History</h2>
+                <div id="comparisonCard" class="comparison-card" style="display: none;"></div>
+                <div class="history-list" id="historyList">
+                    <p class="no-history">No BMI records yet. Calculate your first BMI above!</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Overlay for mobile sidebar -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <script>
+        // Check authentication
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+        }
+
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        document.getElementById('userInfo').innerHTML = `
+            <div class="user-name">👤 ${user.name || 'User'}</div>
+        `;
+
+        // API helper
+        async function apiCall(url, options = {}) {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...options.headers,
+            };
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/login';
+                return;
+            }
+            return response;
+        }
+
+        // Sidebar toggle
+        const sidebar = document.getElementById('sidebar');
+        const sidebarToggle = document.getElementById('sidebarToggle');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+
+        sidebarToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+            sidebarOverlay.classList.toggle('active');
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        // Logout
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        });
+
+        // BMI Form
+        document.getElementById('bmiForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const height = parseFloat(document.getElementById('height').value);
+            const weight = parseFloat(document.getElementById('weight').value);
+            
+            try {
+                const response = await apiCall('/api/bmi/calculate', {
+                    method: 'POST',
+                    body: JSON.stringify({ height, weight }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(data);
+                    loadHistory();
+                } else {
+                    alert(data.detail || 'Failed to calculate BMI');
+                }
+            } catch (err) {
+                alert('Network error. Please try again.');
+            }
+        });
+
+        function showResult(data) {
+            const resultDiv = document.getElementById('bmiResult');
+            resultDiv.style.display = 'block';
+            
+            document.getElementById('bmiValue').textContent = data.bmi.toFixed(1);
+            document.getElementById('bmiCategory').textContent = data.category.toUpperCase();
+            document.getElementById('bmiCategory').className = `bmi-category ${data.category}`;
+            document.getElementById('resultMessage').textContent = data.message;
+            
+            // Position marker on scale
+            const marker = document.getElementById('scaleMarker');
+            const minBmi = 15;
+            const maxBmi = 40;
+            const position = Math.min(Math.max((data.bmi - minBmi) / (maxBmi - minBmi) * 100, 0), 100);
+            marker.style.left = `${position}%`;
+            marker.style.display = 'block';
+            
+            // Show suggestions
+            const list = document.getElementById('suggestionsList');
+            list.innerHTML = data.suggestions.map(s => `<li>${s}</li>`).join('');
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await apiCall('/api/bmi/history');
+                const data = await response.json();
+                
+                const historyList = document.getElementById('historyList');
+                const comparisonCard = document.getElementById('comparisonCard');
+                
+                if (data.records && data.records.length > 0) {
+                    historyList.innerHTML = data.records.map(record => `
+                        <div class="history-item">
+                            <div class="history-date">${new Date(record.created_at).toLocaleDateString()}</div>
+                            <div class="history-details">
+                                <span class="history-bmi">${record.bmi.toFixed(1)}</span>
+                                <span class="history-category ${record.category}">${record.category}</span>
+                            </div>
+                            <div class="history-measurements">
+                                ${record.height}cm / ${record.weight}kg
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    // Show comparison if available
+                    if (data.comparison) {
+                        comparisonCard.style.display = 'block';
+                        const trend = data.comparison.trend;
+                        const trendClass = trend === 'improving' ? 'positive' : 
+                                           trend === 'needs_attention' ? 'negative' : 'neutral';
+                        comparisonCard.innerHTML = `
+                            <div class="comparison-header">
+                                <span class="trend-icon ${trendClass}">
+                                    ${trend === 'improving' ? '📈' : trend === 'needs_attention' ? '⚠️' : '📊'}
+                                </span>
+                                <span class="trend-label">Progress Update</span>
+                            </div>
+                            <div class="comparison-message">${data.comparison.trend_message}</div>
+                            <div class="comparison-values">
+                                <div class="comparison-item">
+                                    <span>Previous:</span>
+                                    <strong>${data.comparison.previous_bmi.toFixed(1)}</strong>
+                                </div>
+                                <div class="comparison-arrow">→</div>
+                                <div class="comparison-item">
+                                    <span>Current:</span>
+                                    <strong>${data.comparison.current_bmi.toFixed(1)}</strong>
+                                </div>
+                                <div class="comparison-change ${data.comparison.bmi_change > 0 ? 'up' : 'down'}">
+                                    ${data.comparison.bmi_change > 0 ? '+' : ''}${data.comparison.bmi_change.toFixed(1)}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        comparisonCard.style.display = 'none';
+                    }
+                } else {
+                    historyList.innerHTML = '<p class="no-history">No BMI records yet. Calculate your first BMI above!</p>';
+                    comparisonCard.style.display = 'none';
+                }
+            } catch (err) {
+                console.error('Failed to load history:', err);
+            }
+        }
+
+        // Load history on page load
+        loadHistory();
+    </script>
+</body>
+</html>

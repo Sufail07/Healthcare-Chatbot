@@ -1,6 +1,35 @@
 // === State ===
 let currentConversationId = null;
 let isLoading = false;
+let authToken = localStorage.getItem('token');
+
+// === Auth Check ===
+if (!authToken) {
+    window.location.href = '/login';
+}
+
+// === User Info ===
+const user = JSON.parse(localStorage.getItem('user') || '{}');
+document.getElementById('userInfo').innerHTML = `
+    <div class="user-name">👤 ${user.name || 'User'}</div>
+`;
+
+// === API Helper ===
+async function apiCall(url, options = {}) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+        ...options.headers,
+    };
+    const response = await fetch(url, { ...options, headers });
+    if (response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return;
+    }
+    return response;
+}
 
 // === DOM Elements ===
 const messageInput = document.getElementById('messageInput');
@@ -13,6 +42,7 @@ const conversationList = document.getElementById('conversationList');
 const sidebarToggle = document.getElementById('sidebarToggle');
 const sidebar = document.getElementById('sidebar');
 const sidebarOverlay = document.getElementById('sidebarOverlay');
+const logoutBtn = document.getElementById('logoutBtn');
 
 // === Init ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -32,6 +62,13 @@ function setupEventListeners() {
     newChatBtn.addEventListener('click', startNewChat);
     sidebarToggle.addEventListener('click', toggleSidebar);
     sidebarOverlay.addEventListener('click', toggleSidebar);
+    logoutBtn.addEventListener('click', logout);
+}
+
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
 }
 
 function onInputChange() {
@@ -46,7 +83,8 @@ function onInputChange() {
 
 async function startNewChat() {
     try {
-        const res = await fetch('/api/chat/new', { method: 'POST' });
+        const res = await apiCall('/api/chat/new', { method: 'POST' });
+        if (!res) return;
         const data = await res.json();
         currentConversationId = data.conversation_id;
         clearChat();
@@ -59,7 +97,8 @@ async function startNewChat() {
 
 async function loadConversations() {
     try {
-        const res = await fetch('/api/history');
+        const res = await apiCall('/api/history');
+        if (!res) return;
         const conversations = await res.json();
         renderConversationList(conversations);
     } catch (err) {
@@ -87,7 +126,8 @@ function renderConversationList(conversations) {
 
 async function loadConversation(id) {
     try {
-        const res = await fetch(`/api/history/${id}`);
+        const res = await apiCall(`/api/history/${id}`);
+        if (!res) return;
         const data = await res.json();
         currentConversationId = id;
         clearChat();
@@ -103,7 +143,7 @@ async function loadConversation(id) {
 
 async function deleteConversation(id) {
     try {
-        await fetch(`/api/history/${id}`, { method: 'DELETE' });
+        await apiCall(`/api/history/${id}`, { method: 'DELETE' });
         if (currentConversationId === id) {
             currentConversationId = null;
             clearChat();
@@ -124,7 +164,8 @@ async function sendMessage() {
     // Create conversation if needed
     if (!currentConversationId) {
         try {
-            const res = await fetch('/api/chat/new', { method: 'POST' });
+            const res = await apiCall('/api/chat/new', { method: 'POST' });
+            if (!res) return;
             const data = await res.json();
             currentConversationId = data.conversation_id;
         } catch (err) {
@@ -141,22 +182,23 @@ async function sendMessage() {
     setLoading(true);
 
     try {
-        const res = await fetch('/api/chat', {
+        const res = await apiCall('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 conversation_id: currentConversationId,
                 message: text,
             }),
         });
 
+        if (!res) return;
+        
         if (!res.ok) {
             const errData = await res.json().catch(() => ({}));
             throw new Error(errData.detail || 'Request failed');
         }
 
         const data = await res.json();
-        addMessage('assistant', data.message, data.diagnosis_data);
+        addMessage('assistant', data.message, data.diagnosis_data, data.follow_up_questions);
         loadConversations(); // Refresh sidebar (title may have changed)
     } catch (err) {
         showError(err.message || 'Failed to get response. Please try again.');
@@ -167,7 +209,7 @@ async function sendMessage() {
 
 // === Rendering ===
 
-function addMessage(role, content, diagnosisData = null) {
+function addMessage(role, content, diagnosisData = null, followUpQuestions = null) {
     const msgEl = document.createElement('div');
     msgEl.className = `message ${role}`;
 
@@ -179,11 +221,24 @@ function addMessage(role, content, diagnosisData = null) {
         diagnosisHtml = renderDiagnosisCard(diagnosisData);
     }
 
+    let followUpHtml = '';
+    if (followUpQuestions && followUpQuestions.length > 0) {
+        followUpHtml = `
+            <div class="follow-up-questions">
+                <p class="follow-up-label">You might want to tell me:</p>
+                ${followUpQuestions.map(q => `
+                    <button class="follow-up-btn" onclick="useExample('${escapeHtml(q)}')">${escapeHtml(q)}</button>
+                `).join('')}
+            </div>
+        `;
+    }
+
     msgEl.innerHTML = `
         <div class="message-avatar">${avatar}</div>
         <div class="message-content">
             ${renderedContent}
             ${diagnosisHtml}
+            ${followUpHtml}
         </div>
     `;
 
@@ -231,6 +286,23 @@ function renderDiagnosisCard(data) {
             </div>`;
     }
 
+    // Severity-based suggestions
+    let suggestionsHtml = '';
+    if (data.suggestions) {
+        const sug = data.suggestions;
+        suggestionsHtml = `
+            <div class="suggestions-card ${sug.type}">
+                <div class="suggestions-header">
+                    <span class="suggestions-icon">${sug.icon || '💡'}</span>
+                    <span class="suggestions-title">${escapeHtml(sug.title)}</span>
+                </div>
+                <ul class="suggestions-list">
+                    ${sug.items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
+                </ul>
+                ${sug.note ? `<p class="suggestions-note">${escapeHtml(sug.note)}</p>` : ''}
+            </div>`;
+    }
+
     let topPredictions = '';
     if (data.top_3 && data.top_3.length) {
         const bars = data.top_3.map(d => {
@@ -245,8 +317,19 @@ function renderDiagnosisCard(data) {
         topPredictions = `<div class="top-predictions"><h4>Top Predictions</h4>${bars}</div>`;
     }
 
+    // Emergency warning
+    let emergencyHtml = '';
+    if (data.emergency_warning) {
+        emergencyHtml = `
+            <div class="emergency-warning">
+                <span class="emergency-icon">🚨</span>
+                <p>${escapeHtml(data.emergency_warning)}</p>
+            </div>`;
+    }
+
     return `
         <div class="diagnosis-card">
+            ${emergencyHtml}
             <div class="diagnosis-header">
                 <span class="diagnosis-disease">${escapeHtml(data.disease)}</span>
                 <span class="confidence-badge">${confidencePct}% match</span>
@@ -258,6 +341,7 @@ function renderDiagnosisCard(data) {
                 ${medsHtml}
                 ${specialistHtml}
             </div>
+            ${suggestionsHtml}
             ${topPredictions}
         </div>`;
 }
