@@ -70,7 +70,7 @@ async def parse_symptoms(user_message: str) -> list[str]:
                 {"role": "user", "content": user_message},
             ],
             temperature=0.0,
-            max_tokens=200,
+            max_tokens=128,
         )
         content = response.choices[0].message.content.strip()
         content = _strip_think_blocks(content)

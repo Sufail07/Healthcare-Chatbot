@@ -135,7 +135,7 @@ async def generate_smart_followup(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.7,
-            max_tokens=300,
+            max_tokens=160,
         )
         content = response.choices[0].message.content
         content = _strip_think_blocks(content)
@@ -241,7 +241,7 @@ async def generate_diagnosis_response(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.7,
-            max_tokens=600,
+            max_tokens=192,
         )
         content = response.choices[0].message.content
         content = _strip_think_blocks(content)
@@ -285,7 +285,7 @@ async def generate_followup_response(
             model=settings.deepseek_model,
             messages=messages,
             temperature=0.7,
-            max_tokens=400,
+            max_tokens=160,
         )
         content = response.choices[0].message.content
         return _strip_think_blocks(content)
