@@ -44,6 +44,11 @@ async def parse_symptoms(user_message: str) -> list[str]:
     known = get_known_symptoms()
     known_str = ", ".join(known)
 
+    settings = get_settings()
+    if not settings.deepseek_api_key.strip():
+        logger.warning("DeepSeek/OpenRouter API key is missing; using fallback symptom parser.")
+        return _fallback_parse(user_message, known)
+
     system_prompt = (
         "You are a medical symptom extraction system. Extract symptoms from the user's "
         "message and map them to the closest matching symptoms from the known list.\n\n"
@@ -56,7 +61,6 @@ async def parse_symptoms(user_message: str) -> list[str]:
     )
 
     try:
-        settings = get_settings()
         client = _get_client()
         response = await _call_with_retry(
             client,

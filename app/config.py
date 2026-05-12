@@ -2,6 +2,7 @@ import secrets
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from dotenv import dotenv_values
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -31,6 +32,10 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    # Resolve .env relative to the project root so startup cwd does not matter.
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    env_values = dotenv_values(env_path) if env_path.exists() else {}
+
     # .env file values take priority over shell env vars
-    env_overrides = {k.lower(): v for k, v in dotenv_values(".env").items() if v}
+    env_overrides = {k.lower(): v for k, v in env_values.items() if v}
     return Settings(**env_overrides)

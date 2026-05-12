@@ -67,6 +67,22 @@ async def generate_smart_followup(
 ) -> dict:
     """Generate smart follow-up questions to gather more information."""
     symptom_str = ", ".join(s.replace("_", " ") for s in symptoms)
+    settings = get_settings()
+
+    if not settings.deepseek_api_key.strip():
+        logger.warning("DeepSeek/OpenRouter API key is missing; using fallback follow-up response.")
+        return {
+            "message": (
+                f"I see you're experiencing {symptom_str}. To better understand your situation:\n\n"
+                "- How long have you been experiencing these symptoms?\n"
+                "- Are there any other symptoms you've noticed?\n"
+                "- Have the symptoms been getting better, worse, or staying the same?"
+            ),
+            "questions": [
+                "How long have you had these symptoms?",
+                "Any other symptoms?",
+            ],
+        }
     
     system_prompt = (
         "You are a friendly healthcare assistant having a conversation to understand "
@@ -89,7 +105,6 @@ async def generate_smart_followup(
     )
     
     try:
-        settings = get_settings()
         client = _get_client()
         response = await _call_with_retry(
             client,
@@ -150,6 +165,11 @@ async def generate_diagnosis_response(
 
     Returns: {message, remedies, medications, specialist}
     """
+    settings = get_settings()
+    if not settings.deepseek_api_key.strip():
+        logger.warning("DeepSeek/OpenRouter API key is missing; using fallback diagnosis response.")
+        return _fallback_response(disease, confidence, severity, symptoms)
+
     system_prompt = (
         "You are a helpful healthcare assistant chatbot. You provide informational "
         "health guidance based on symptom analysis. You are NOT a doctor. Always include "
@@ -191,7 +211,6 @@ async def generate_diagnosis_response(
     )
 
     try:
-        settings = get_settings()
         client = _get_client()
         response = await _call_with_retry(
             client,
@@ -217,6 +236,15 @@ async def generate_followup_response(
     user_message: str,
 ) -> str:
     """Generate a follow-up response for ongoing conversation."""
+    settings = get_settings()
+    if not settings.deepseek_api_key.strip():
+        logger.warning("DeepSeek/OpenRouter API key is missing; using fallback follow-up text.")
+        return (
+            "I'm having trouble connecting right now, so I can still help based on the "
+            "information already shared. Please tell me more about your symptoms, how "
+            "long you've had them, and whether anything is getting worse."
+        )
+
     system_prompt = (
         "You are a helpful healthcare assistant chatbot. Continue the conversation "
         "helpfully. If the user asks about specialists, medications, or follow-up care, "
@@ -230,7 +258,6 @@ async def generate_followup_response(
     messages.append({"role": "user", "content": user_message})
 
     try:
-        settings = get_settings()
         client = _get_client()
         response = await _call_with_retry(
             client,
