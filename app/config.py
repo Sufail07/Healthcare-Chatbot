@@ -8,7 +8,7 @@ from pathlib import Path
 class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://openrouter.ai/api/v1"
-    deepseek_model: str = "qwen/qwen3.6-plus:free"
+    deepseek_model: str = "qwen/qwen3.6-plus"
     deepseek_fallback_models: str = "google/gemma-3-4b-it:free,nvidia/nemotron-3-super-120b-a12b:free,stepfun/step-3.5-flash:free"
     database_url: str = "sqlite:///./db/chatbot.db"
     ml_model_path: str = "data/models/disease_model.joblib"
@@ -22,9 +22,23 @@ class Settings(BaseSettings):
     @property
     def all_models(self) -> list[str]:
         """Primary model + fallbacks for rotation on rate limits."""
-        models = [self.deepseek_model]
+        models: list[str] = []
+        seen: set[str] = set()
+
+        def add_model(model: str) -> None:
+            if model and model not in seen:
+                seen.add(model)
+                models.append(model)
+
+        raw_models = [self.deepseek_model]
         if self.deepseek_fallback_models:
-            models.extend(m.strip() for m in self.deepseek_fallback_models.split(",") if m.strip())
+            raw_models.extend(m.strip() for m in self.deepseek_fallback_models.split(",") if m.strip())
+
+        for raw in raw_models:
+            add_model(raw)
+            if raw.endswith(":free"):
+                add_model(raw.removesuffix(":free"))
+
         return models
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

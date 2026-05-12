@@ -28,6 +28,24 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
+def _is_fallbackable_error(error: Exception) -> bool:
+    """Return True when the request should try the next model in the chain."""
+    err_str = str(error).lower()
+    return any(
+        phrase in err_str
+        for phrase in (
+            "429",
+            "rate",
+            "timeout",
+            "no endpoints found",
+            "model not found",
+            "not found",
+            "does not exist",
+            "unavailable",
+        )
+    )
+
+
 async def _call_with_retry(client, **kwargs) -> object:
     """Call the API, cycling through fallback models on rate-limit/timeout."""
     settings = get_settings()
@@ -41,9 +59,7 @@ async def _call_with_retry(client, **kwargs) -> object:
             return response
         except Exception as e:
             last_error = e
-            err_str = str(e).lower()
-            is_retryable = "429" in str(e) or "rate" in err_str or "timeout" in err_str
-            if is_retryable:
+            if _is_fallbackable_error(e):
                 logger.warning(f"Model {model} rate-limited/timed out, trying next fallback: {e}")
                 await asyncio.sleep(1)
                 continue
@@ -53,7 +69,12 @@ async def _call_with_retry(client, **kwargs) -> object:
     logger.warning("All models rate-limited, waiting 5s and retrying primary...")
     await asyncio.sleep(5)
     kwargs["model"] = models[0]
-    return await client.chat.completions.create(**kwargs)
+    try:
+        return await client.chat.completions.create(**kwargs)
+    except Exception:
+        if last_error is not None:
+            raise last_error
+        raise
 
 
 def _strip_think_blocks(text: str) -> str:
