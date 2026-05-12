@@ -46,35 +46,47 @@ def _is_fallbackable_error(error: Exception) -> bool:
     )
 
 
+def _parse_affordable_max_tokens(error: Exception) -> int | None:
+    """Extract the provider budget ceiling from a 402 error."""
+    match = re.search(r"can only afford (\d+)", str(error), flags=re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    return None
+
+
 async def _call_with_retry(client, **kwargs) -> object:
-    """Call the API, cycling through fallback models on rate-limit/timeout."""
+    """Call the API, cycling through fallback models when a model errors."""
     settings = get_settings()
     models = settings.all_models
-    last_error = None
 
     for model in models:
-        kwargs["model"] = model
-        try:
-            response = await client.chat.completions.create(**kwargs)
-            return response
-        except Exception as e:
-            last_error = e
-            if _is_fallbackable_error(e):
-                logger.warning(f"Model {model} rate-limited/timed out, trying next fallback: {e}")
-                await asyncio.sleep(1)
-                continue
-            raise
+        call_kwargs = dict(kwargs)
+        call_kwargs["model"] = model
+        max_tokens = call_kwargs.get("max_tokens")
+        retried_with_lower_budget = False
 
-    # All models exhausted — retry primary once more after a longer wait
-    logger.warning("All models rate-limited, waiting 5s and retrying primary...")
-    await asyncio.sleep(5)
-    kwargs["model"] = models[0]
-    try:
-        return await client.chat.completions.create(**kwargs)
-    except Exception:
-        if last_error is not None:
-            raise last_error
-        raise
+        while True:
+            try:
+                return await client.chat.completions.create(**call_kwargs)
+            except Exception as e:
+                if not retried_with_lower_budget and isinstance(max_tokens, int) and "402" in str(e):
+                    affordable = _parse_affordable_max_tokens(e)
+                    next_tokens = affordable if affordable is not None else max(16, max_tokens // 2)
+                    if next_tokens < max_tokens:
+                        call_kwargs["max_tokens"] = next_tokens
+                        max_tokens = next_tokens
+                        retried_with_lower_budget = True
+                        logger.warning(f"Model {model} exceeded token budget; retrying with max_tokens={next_tokens}: {e}")
+                        continue
+
+                if _is_fallbackable_error(e) or "402" in str(e):
+                    logger.warning(f"Model {model} failed; trying next fallback: {e}")
+                    await asyncio.sleep(1)
+                    break
+
+                raise
+
+    raise RuntimeError("All configured models failed")
 
 
 def _strip_think_blocks(text: str) -> str:
